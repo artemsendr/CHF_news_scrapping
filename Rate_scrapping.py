@@ -20,7 +20,7 @@ def get_news(start, end):
     :return: list of tuples date - news
     """
     news_page_links = get_news_pages(start, end)
-    for links in news_page_links:
+    for link in news_page_links:
         take_news(link)
 
 def main():

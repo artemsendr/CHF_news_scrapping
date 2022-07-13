@@ -1,5 +1,7 @@
 #modules required to the data scraping code:
+re
 bs4
 BeautifulSoup
 grequests
 requests
+datetime

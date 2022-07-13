@@ -105,10 +105,10 @@ def get_response(film_url, header):
 def output_news(news):
     """
     print, print to file,.. news
-    :param news: tuple of items connected to news (date, text,...)
+    :param news: dict of items connected to news (date, text,...)
     :return: nothing
     """
-    pass
+    print(f"date: {news['date']}\n\n text: \n {news[text]}
 
 def main():
     #get_rate(start, end, interval)

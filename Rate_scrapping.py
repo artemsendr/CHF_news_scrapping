@@ -12,6 +12,8 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0'
 }
 
+NEWS_URL = 'https://www.investing.com/currencies/usd-chf-news/'
+
 
 def get_rate(start_datetime, end_datetime, interval):
     """
@@ -36,6 +38,17 @@ def get_news(start, end):
         output_news(news)
 
 
+def get_news_pages(start, end):
+    summary_url = NEWS_URL
+    while True:
+        response = get_response(summary_url, HEADERS)
+        soup = BeautifulSoup(response.content, 'html.parser')
+        news_items = soup.findAll(class_="js-article-item articleItem   ")
+        for news in news_items:
+            date_scope = soup.find(class_="date").text
+            date = date_scope.split(";")[1]
+            print(date)
+        break
 
 def take_news(links):
     """
@@ -64,7 +77,7 @@ def take_news(links):
     print(news_text)
     print(date)
     print(author)
-    return (date,author, news_section)
+    return {'date': date, 'author': author, 'text': news_text}
 
 def get_response(film_url, header):
     try:

@@ -1,0 +1,5 @@
+#modules required to the data scraping code:
+bs4
+BeautifulSoup
+grequests
+requests

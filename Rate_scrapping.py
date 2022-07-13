@@ -3,6 +3,8 @@ import re
 from bs4 import BeautifulSoup
 import grequests
 import requests
+from datetime import datetime
+
 
 HEADERS = {
     'Access-Control-Allow-Origin': '*',
@@ -12,6 +14,7 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0'
 }
 
+SITE_URL = 'https://www.investing.com'
 NEWS_URL = 'https://www.investing.com/currencies/usd-chf-news/'
 
 
@@ -40,15 +43,28 @@ def get_news(start, end):
 
 def get_news_pages(start, end):
     summary_url = NEWS_URL
-    while True:
+    break_condition = True
+    news_links = []
+    page_number = 1
+    while break_condition:
         response = get_response(summary_url, HEADERS)
         soup = BeautifulSoup(response.content, 'html.parser')
-        news_items = soup.findAll(class_="js-article-item articleItem   ")
+        news_items = soup.findAll(class_="articleDetails")
         for news in news_items:
-            date_scope = soup.find(class_="date").text
-            date = date_scope.split(";")[1]
-            print(date)
-        break
+            date_scope = news.find(class_="date").text
+            date = date_scope.replace(u'\xa0', "")
+            date = date.strip("- ")
+            date_news = datetime.strptime(date, '%b %d, %Y')
+            if start <= date_news <= end:
+                url = news.parent.find("a").get('href')
+                news_links.append(SITE_URL + url)
+            elif date_news < start:
+                break_condition = False
+                break
+        # go to next page
+        page_number += 1
+        summary_url = NEWS_URL + str(page_number)
+    return news_links
 
 def take_news(links):
     """
@@ -97,8 +113,9 @@ def output_news(news):
 def main():
     #get_rate(start, end, interval)
     #get_news(start, end)
-    test_url = ['https://www.investing.com/news/forex-news/dollar-soars-against-the-yen-after-boj-stands-pat-2838157']
-    take_news(test_url)
+    #test_url = ['https://www.investing.com/news/forex-news/dollar-soars-against-the-yen-after-boj-stands-pat-2838157']
+    #take_news(test_url)
+    print(get_news_pages(datetime(2020, 2, 25), datetime(2022, 7, 11)))
 
 
 main()

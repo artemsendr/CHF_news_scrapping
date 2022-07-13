@@ -90,9 +90,12 @@ def output_news(news):
     """
     print, print to file,.. news
     :param news: dict of items connected to news (date, text,...)
-    :return: nothing
+    :returns: nothing
     """
-    print(f"date: {news['date']}\n\n text: \n {news[text]}
+    print(f"date: {news['date']}\n\n text: \n {news[text]}")
+    with open("news_file.txt" ,'w') as nf:
+        nf.write(news[text])
+    print(nf)
 
 def main():
     #get_rate(start, end, interval)

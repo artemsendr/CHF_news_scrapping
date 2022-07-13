@@ -2,8 +2,9 @@
 # CHF_news_scrapping
 Data mining project of gathering data about CHFUSD rate and related news
 
-# problem solving
-to get the neccesary data we use requests,grequests and BeautifulSoup moduls 
+# solving the problem
+to get the neccesary data we use the requests, grequests and BeautifulSoup moduls and their functionality in varius implenetd functions.
+The code is built "top down" style
 
 # Functions and Usage
 The main function is get_news, that gathers links to news in the website and displays it.

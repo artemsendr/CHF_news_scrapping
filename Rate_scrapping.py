@@ -72,7 +72,9 @@ def take_news(links):
     :param links: list url to news
     :return: news
     """
-    link = links[0]
+    link = links
+    #news = []
+    #for link in links:
     response = get_response(link, HEADERS)
     soup = BeautifulSoup(response.content, 'html.parser')
     news_section = soup.find(class_="WYSIWYG articlePage")
@@ -89,11 +91,8 @@ def take_news(links):
         author = author[3:]
 
     date = soup.find(class_="contentSectionDetails").select_one('span').text
-
-    print(news_text)
-    print(date)
-    print(author)
     return {'date': date, 'author': author, 'text': news_text}
+
 
 def get_response(film_url, header):
     try:
@@ -105,17 +104,17 @@ def get_response(film_url, header):
 def output_news(news):
     """
     print, print to file,.. news
-    :param news: tuple of items connected to news (date, text,...)
+    :param news: dict of items connected to news (date, text,...)
     :return: nothing
     """
-    pass
+    print(f"date: {news['date']}\n\n text: \n {news['text']}")
 
 def main():
     #get_rate(start, end, interval)
-    #get_news(start, end)
+    get_news(datetime(2020, 2, 25), datetime(2022, 7, 11))
     #test_url = ['https://www.investing.com/news/forex-news/dollar-soars-against-the-yen-after-boj-stands-pat-2838157']
     #take_news(test_url)
-    print(get_news_pages(datetime(2020, 2, 25), datetime(2022, 7, 11)))
+    #print(get_news_pages(datetime(2020, 2, 25), datetime(2022, 7, 11)))
 
 
 main()

@@ -1,7 +1,7 @@
 import re
 import argparse
 from bs4 import BeautifulSoup
-import grequests
+# import grequests
 import requests
 from datetime import datetime
 import pandas as pd
@@ -38,13 +38,17 @@ def get_rate(start_datetime, end_datetime, interval):
 
 
 def get_forum_page(url):
+    """
+    get single forum page by url and parse it to nice structure
+    """
     response = get_response(url, HEADERS)
     f = open("testing.html", "w", encoding="utf-8")
     f.write(response.text)
     f.close()
 
     soup = BeautifulSoup(response.content, 'html.parser')
-    df = pd.DataFrame(columns=['id', 'instrument_id', 'parent_id','username', 'postdate', 'comment_text'], index=['id'])
+    df = pd.DataFrame(columns=['id', 'instrument_id', 'parent_id', 'username', 'postdate', 'comment_text'],
+                      index=['id'])
     comment_tree = soup.findAll(class_='discussion-list_comments__3rBOm pb-2 border-0')
     for comments in comment_tree:
         comment = comments.find(class_='comment_comment-wrapper__hJ8sd')
@@ -57,7 +61,6 @@ def get_forum_page(url):
         print(username, postdate)"""
 
 
-
 def set_technical_period(url):
     """
     makes TECHNICAL_URL page show Monthly recommendations.
@@ -66,14 +69,11 @@ def set_technical_period(url):
     service = Service(executable_path=ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service)
     driver.get(url)
-    driver.implicitly_wait(3)
-    TimeperiodsBox = driver.find_element(by=By.ID, value="timePeriodsWidget") #MonthlyBut = TimeperiodsBox.
-    btn = driver.find_element("xpath","//*[contains(text(), 'Monthly')]")
-    btn.click()
-    #MonthlyBut.send_keys("webdriver" + Keys.ENTER)
-    txxt = driver.page_source
-    return txxt
-
+    driver.implicitly_wait(5)
+    time_periods_box = driver.find_element(by=By.ID, value="timePeriodsWidget")
+    monthly_but = time_periods_box.find_element("xpath", "//*[contains(text(), 'Monthly')]")
+    monthly_but.click()
+    return driver.page_source
 
 
 def get_technical(url):
@@ -83,8 +83,8 @@ def get_technical(url):
     :return: ['Name', 'Value', 'Action'] technicals
     """
     response = set_technical_period(url)
-    #response = get_response(url, HEADERS)
-    soup = BeautifulSoup(response, 'html.parser') #response.content
+    # response = get_response(url, HEADERS)
+    soup = BeautifulSoup(response, 'html.parser')   # response.content
     table = soup.find('table', class_='genTbl closedTbl technicalIndicatorsTbl smallTbl float_lang_base_1')
     # Defining of the dataframe
     df = pd.DataFrame(columns=['Name', 'Value', 'Action'])
@@ -98,9 +98,9 @@ def get_technical(url):
             value = columns[1].text.strip()
             action = columns[2].text.strip()
             dc = {'Name': name, 'Value': value, 'Action': action}
-            #df = df.append({'Name': name, 'Value': value, 'Action': action}, ignore_index=True)
             df = pd.concat([pd.DataFrame(dc, index=[0]), df.loc[:]]).reset_index(drop=True)
     return df
+
 
 def get_news(start, end):
     """
@@ -145,6 +145,7 @@ def get_news_pages(start, end):
         summary_url = NEWS_URL + str(page_number)
     return news_links
 
+
 def take_news(links):
     """
     take single news text by link
@@ -152,13 +153,13 @@ def take_news(links):
     :return: news
     """
     link = links
-    #news = []
-    #for link in links:
+    # news = []
+    # for link in links:
     response = get_response(link, HEADERS)
     soup = BeautifulSoup(response.content, 'html.parser')
     news_section = soup.find(class_="WYSIWYG articlePage")
-    author =''
-    news_text =''
+    author = ''
+    news_text = ''
     for parts in news_section.findChildren("p"):
         if author == '':
             author = parts.text
@@ -186,6 +187,7 @@ def get_response(url, header):
     except Exception:
         raise ConnectionError("Connection error during request directors of %s" % url)
 
+
 def output_news(news):
     """
     print, print to file,.. news
@@ -194,41 +196,45 @@ def output_news(news):
     """
     print(f"date: {news['date']}\n\n text: \n {news['text']}")
 
+
 def main():
-    #get_rate(start, end, interval)
-    #get_news(datetime(2020, 2, 25), datetime(2022, 7, 11))
-    #test_url = ['https://www.investing.com/news/forex-news/dollar-soars-against-the-yen-after-boj-stands-pat-2838157']
-    #take_news(test_url)
-    #print(get_news_pages(datetime(2020, 2, 25), datetime(2022, 7, 11)))
-    print(get_technical(TECHNICAL_URL))
-    #get_forum_page(FORUM_URL)
-    #set_technical_period(TECHNICAL_URL)
+    command_parser()
+
+
+def valid_date(s):
+    """
+    supporting function to resolve if type is datetime or not in command line args
+    """
+    try:
+        return datetime.strptime(s, "%Y-%m-%d")
+    except ValueError:
+        msg = "not a valid date: {0!r}".format(s)
+        raise argparse.ArgumentTypeError(msg)
 
 
 def command_parser():
+    """
+    parser usage: "technical [url to technical page=TECHNICAL_URL]","news date_from [date_to=datetime.today()]"
+    :return: print of result
+    """
     parser = argparse.ArgumentParser(description='parsing data options')
     FUNCTION_MAP = {'news': get_news,
-                    'technical':get_technical}
+                    'technical': get_technical}
+    parser.add_argument('operation', nargs="?", type=str, choices=['news', 'technical'])
 
-    parser.add_argument('command', choices=FUNCTION_MAP.keys())
-    parser.add_argument('-n', '--news', help="news command", required=False)
-    parser.add_argument('-t', '--technical', help="technical command", required=False)
-    args = parser.parse_args()
-    return parser
-    # func = FUNCTION_MAP[args.command]
-    # func()
-    # parser.parse_args()
-    # input_args = parser.parse_args()
-    # data_functions = {'get_news': get_news, 'get_technical': get_technical}
-    # data_functions[input_args.action](input_args.first_arg,input_args.second_arg)
-    return parser
+    args, sub_args = parser.parse_known_args()
+    if args.operation == "technical":
+        parser = argparse.ArgumentParser()
+        parser.add_argument('link', nargs="?", type=str, default=TECHNICAL_URL)
+        args = parser.parse_args(sub_args)
+        print(FUNCTION_MAP["technical"](args.link))
+
+    elif args.operation == "news":
+        parser = argparse.ArgumentParser()
+        parser.add_argument('date_from', type=valid_date)
+        parser.add_argument('date_to', nargs="?", type=valid_date, default=datetime.today())
+        args = parser.parse_args(sub_args)
+        print(FUNCTION_MAP["news"](args.date_from, args.date_to))
 
 
-#     parser = argparse.ArgumentParser(description='parsing data options')
-#     parser.add_argument('get_technical', help='gets the technicals from website')
-#     parser.add_argument('url', type=str, help='gets the technicals from website')
-#     parser.add_argument('get_news')
-#     parser.add_argument('start', type=datetime)
-#     parser.add_argument('end', type=datetime)
-#     parser.parse_args()
 main()

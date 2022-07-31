@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import grequests
 import requests
 from datetime import datetime
+import pandas as pd
 
 
 HEADERS = {
@@ -13,9 +14,10 @@ HEADERS = {
     'Access-Control-Max-Age': '3600',
     'User-Agent': 'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:52.0) Gecko/20100101 Firefox/52.0'
 }
-
 SITE_URL = 'https://www.investing.com'
 NEWS_URL = 'https://www.investing.com/currencies/usd-chf-news/'
+TECHNICAL_URL = 'https://www.investing.com/currencies/usd-chf-technical/'
+FORUM_URL = 'https://www.investing.com/currencies/usd-chf-commentary/'
 
 
 def get_rate(start_datetime, end_datetime, interval):
@@ -27,6 +29,59 @@ def get_rate(start_datetime, end_datetime, interval):
     :return:
     """
     pass
+
+
+def get_forum_page(url):
+    response = get_response(url, HEADERS)
+
+    soup = BeautifulSoup(response.content, 'html.parser')
+    df = pd.DataFrame(columns=['id', 'instrument_id', 'parent_id','username', 'postdate', 'comment_text'], index=['id'])
+    comment_tree = soup.findAll(class_='discussion-list_comments__3rBOm pb-2 border-0')
+    for comments in comment_tree:
+        comment = comments.find(class_='comment_comment-wrapper__hJ8sd')
+        print(comment)
+        """user = comment.find(class_="comment_user-info__AWjKG")
+        username = user.findChildren("a", recursive=False)[0]
+        username = username.text
+        postdate = user.findChildren("span", recursive=False)[0]
+        postdate = postdate.text
+        print(username, postdate)"""
+
+
+
+def set_technical_period():
+    """
+    makes TECHNICAL_URL page show Monthly recommendations.
+    :return:
+    """
+    pass
+
+
+def get_technical(url):
+    """
+    srape TECHNICAL_URL page and returns pandas data frame with all techincals
+    :param url: url address of page with techicals
+    :return: ['Name', 'Value', 'Action'] technicals
+    """
+    set_technical_period()
+    response = get_response(url, HEADERS)
+    soup = BeautifulSoup(response.content, 'html.parser')
+    table = soup.find('table', class_='genTbl closedTbl technicalIndicatorsTbl smallTbl float_lang_base_1')
+    # Defining of the dataframe
+    df = pd.DataFrame(columns=['Name', 'Value', 'Action'])
+
+    for row in table.tbody.find_all('tr'):
+        # Find all data for each column
+        columns = row.find_all('td')
+
+        if len(columns) == 3:
+            name = columns[0].text.strip()
+            value = columns[1].text.strip()
+            action = columns[2].text.strip()
+            dc = {'Name': name, 'Value': value, 'Action': action}
+            #df = df.append({'Name': name, 'Value': value, 'Action': action}, ignore_index=True)
+            df = pd.concat([pd.DataFrame(dc, index=[0]), df.loc[:]]).reset_index(drop=True)
+    return df
 
 def get_news(start, end):
     """
@@ -42,6 +97,11 @@ def get_news(start, end):
 
 
 def get_news_pages(start, end):
+    """
+    :param start: start date of news scrapping
+    :param end: end date of news scrapping
+    :return: list of links to news pages from start to end date
+    """
     summary_url = NEWS_URL
     break_condition = True
     news_links = []
@@ -94,12 +154,18 @@ def take_news(links):
     return {'date': date, 'author': author, 'text': news_text}
 
 
-def get_response(film_url, header):
+def get_response(url, header):
+    """
+    return response object on get
+    :param url: any url link
+    :param header: header of request
+    :return: response object on get request
+    """
     try:
-        response = requests.get(film_url, header)
+        response = requests.get(url, header)
         return response
     except Exception:
-        raise ConnectionError("Connection error during request directors of %s" % film_url)
+        raise ConnectionError("Connection error during request directors of %s" % url)
 
 def output_news(news):
     """
@@ -111,10 +177,12 @@ def output_news(news):
 
 def main():
     #get_rate(start, end, interval)
-    get_news(datetime(2020, 2, 25), datetime(2022, 7, 11))
+    #get_news(datetime(2020, 2, 25), datetime(2022, 7, 11))
     #test_url = ['https://www.investing.com/news/forex-news/dollar-soars-against-the-yen-after-boj-stands-pat-2838157']
     #take_news(test_url)
     #print(get_news_pages(datetime(2020, 2, 25), datetime(2022, 7, 11)))
+    #print(get_technical(TECHNICAL_URL))
+    get_forum_page(FORUM_URL)
 
 
 main()

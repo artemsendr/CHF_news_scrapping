@@ -5,6 +5,12 @@ import grequests
 import requests
 from datetime import datetime
 import pandas as pd
+# pip install webdriver-manager
+# service = Service(executable_path=ChromeDriverManager().install())
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.common.by import By
 
 
 HEADERS = {
@@ -33,6 +39,9 @@ def get_rate(start_datetime, end_datetime, interval):
 
 def get_forum_page(url):
     response = get_response(url, HEADERS)
+    f = open("testing.html", "w", encoding="utf-8")
+    f.write(response.text)
+    f.close()
 
     soup = BeautifulSoup(response.content, 'html.parser')
     df = pd.DataFrame(columns=['id', 'instrument_id', 'parent_id','username', 'postdate', 'comment_text'], index=['id'])
@@ -49,12 +58,22 @@ def get_forum_page(url):
 
 
 
-def set_technical_period():
+def set_technical_period(url):
     """
     makes TECHNICAL_URL page show Monthly recommendations.
     :return:
     """
-    pass
+    service = Service(executable_path=ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service)
+    driver.get(url)
+    driver.implicitly_wait(3)
+    TimeperiodsBox = driver.find_element(by=By.ID, value="timePeriodsWidget") #MonthlyBut = TimeperiodsBox.
+    btn = driver.find_element("xpath","//*[contains(text(), 'Monthly')]")
+    btn.click()
+    #MonthlyBut.send_keys("webdriver" + Keys.ENTER)
+    txxt = driver.page_source
+    return txxt
+
 
 
 def get_technical(url):
@@ -63,9 +82,9 @@ def get_technical(url):
     :param url: url address of page with techicals
     :return: ['Name', 'Value', 'Action'] technicals
     """
-    set_technical_period()
-    response = get_response(url, HEADERS)
-    soup = BeautifulSoup(response.content, 'html.parser')
+    response = set_technical_period(url)
+    #response = get_response(url, HEADERS)
+    soup = BeautifulSoup(response, 'html.parser') #response.content
     table = soup.find('table', class_='genTbl closedTbl technicalIndicatorsTbl smallTbl float_lang_base_1')
     # Defining of the dataframe
     df = pd.DataFrame(columns=['Name', 'Value', 'Action'])
@@ -181,7 +200,8 @@ def main():
     #test_url = ['https://www.investing.com/news/forex-news/dollar-soars-against-the-yen-after-boj-stands-pat-2838157']
     #take_news(test_url)
     #print(get_news_pages(datetime(2020, 2, 25), datetime(2022, 7, 11)))
-    #print(get_technical(TECHNICAL_URL))
-    get_forum_page(FORUM_URL)
+    print(get_technical(TECHNICAL_URL))
+    #get_forum_page(FORUM_URL)
+    #set_technical_period(TECHNICAL_URL)
 
 main()

@@ -1,5 +1,5 @@
 import re
-
+import argparse
 from bs4 import BeautifulSoup
 import grequests
 import requests
@@ -184,5 +184,13 @@ def main():
     #print(get_technical(TECHNICAL_URL))
     get_forum_page(FORUM_URL)
 
+def scraper_parser(*argv, **kwargs):
+    parser = argparse.ArgumentParser(description='parsing data options')
+    parser.add_argument('get_technical', help='gets the technicals from website')
+    parser.add_argument('url', type=str, help='gets the technicals from website')
+    parser.add_argument('get_news')
+    parser.add_argument('start', type=datetime)
+    parser.add_argument('end', type=datetime)
+    parser.parse_args()    
 
 main()

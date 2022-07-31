@@ -1,5 +1,5 @@
 import re
-
+import argparse
 from bs4 import BeautifulSoup
 import grequests
 import requests
@@ -164,7 +164,7 @@ def take_news(links):
             author = parts.text
         else:
             news_text += parts.text + '\n'
-    news_text = news_text [:-1]
+    news_text = news_text[:-1]
 
     if re.search('^By ', author):
         author = author[3:]
@@ -204,4 +204,31 @@ def main():
     #get_forum_page(FORUM_URL)
     #set_technical_period(TECHNICAL_URL)
 
+
+def command_parser():
+    parser = argparse.ArgumentParser(description='parsing data options')
+    FUNCTION_MAP = {'news': get_news,
+                    'technical':get_technical}
+
+    parser.add_argument('command', choices=FUNCTION_MAP.keys())
+    parser.add_argument('-n', '--news', help="news command", required=False)
+    parser.add_argument('-t', '--technical', help="technical command", required=False)
+    args = parser.parse_args()
+    return parser
+    # func = FUNCTION_MAP[args.command]
+    # func()
+    # parser.parse_args()
+    # input_args = parser.parse_args()
+    # data_functions = {'get_news': get_news, 'get_technical': get_technical}
+    # data_functions[input_args.action](input_args.first_arg,input_args.second_arg)
+    return parser
+
+
+#     parser = argparse.ArgumentParser(description='parsing data options')
+#     parser.add_argument('get_technical', help='gets the technicals from website')
+#     parser.add_argument('url', type=str, help='gets the technicals from website')
+#     parser.add_argument('get_news')
+#     parser.add_argument('start', type=datetime)
+#     parser.add_argument('end', type=datetime)
+#     parser.parse_args()
 main()

@@ -1,7 +1,7 @@
 import re
 import logging
 import argparse
-
+import pymysql
 import numpy as np
 from bs4 import BeautifulSoup
 # import grequests
@@ -15,7 +15,7 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 
-
+PASSWORD = input("Provide password for MySQL server:\n")
 HEADERS = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET',
@@ -27,21 +27,31 @@ SITE_URL = 'https://www.investing.com'
 NEWS_URL = 'https://www.investing.com/currencies/usd-chf-news/'
 TECHNICAL_URL = 'https://www.investing.com/currencies/usd-chf-technical/'
 FORUM_URL = 'https://www.investing.com/currencies/usd-chf-commentary/'
+DB_NAME ='ratesrcaping'
 
-
-def get_rate(start_datetime, end_datetime, interval):
+def get_rate(start_date, end_date, pair):
     """
-    gets information about CHFUSD rate within start to end period by inteval
-    :param start_datetime: start date or datetime
-    :param end_datetime: end date or datetime
-    :param interval:
-    :return:
+    gets information about pair rate within start to end period from ecb web site
+    :param pair: currency pair str
+    :param start_date: start date in yyyy-mm-dd format
+    :param end_date: end date in yyyy-mm-dd format
+    :return: pandas dataframe date-rate
     """
-    url = 'https://api.exchangerate.host/timeseries?start_date=2020-01-01&end_date=2020-01-04'
+    symbol = pair[-3:]
+    base = pair[:3]
+    url = 'https://api.exchangerate.host/timeseries?start_date='+start_date+'&end_date='+end_date+\
+            '&symbols='+symbol+'&base='+base+'&source=ecb'
     response = requests.get(url)
     data = response.json()
 
-    print(data)
+    df = pd.DataFrame(columns=['date', 'rate'])
+
+    for date, rate in data['rates'].items():
+        rate_str = list(rate.values())[0]
+        rate = float(rate_str)
+        dc = {'date': date, 'rate': rate}
+        df = pd.concat([pd.DataFrame(dc, index=[0]), df.loc[:]]).reset_index(drop=True)
+    return df
 
 
 def get_forum(url, start_date, end_date):
@@ -191,6 +201,15 @@ def get_news(url, start, end, *, return_news=True, return_comments=True):
         output_news(news, comments)
 
 
+def setup_connection(db_name=DB_NAME):
+    cnx2 = pymysql.connect(host='localhost',
+                           user='root',
+                           password=PASSWORD,
+                           database=db_name)
+    cursor2 = cnx2.cursor()
+    return cnx2, cursor2
+
+
 def get_news_pages(url, start, end):
     """
     Returns list of pages from start to end date
@@ -330,7 +349,15 @@ def main():
         format='%(asctime)s-%(levelname)s+++FILE:%(filename)s-FUNC:%(funcName)s-LINE:%(lineno)d-%(message)s',
                         level=logging.INFO)
     #t = get_forum('https://www.investing.com/currencies/usd-chf-commentary', datetime(2022,6,1), datetime(2022,8,13))
-    command_parser()
+    # command_parser()
+    df = get_rate('2022-06-30','2022-08-14','USDCHF')
+    data = df.to_dict('records')
+    cnx, cursor = setup_connection(db_name=DB_NAME)
+    #cursor.execute(f"USE {DB_NAME}")
+    query = """INSERT INTO daily_rates (date_on, rate)
+               VALUES (%(date)s, %(rate)s)"""
+    cursor.executemany(query, data)
+    cnx.commit()
 
 
 

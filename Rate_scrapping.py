@@ -1,5 +1,7 @@
 import re
 import logging
+import traceback
+import sys
 import argparse
 import pymysql
 import numpy as np
@@ -27,7 +29,8 @@ SITE_URL = 'https://www.investing.com'
 NEWS_URL = 'https://www.investing.com/currencies/usd-chf-news/'
 TECHNICAL_URL = 'https://www.investing.com/currencies/usd-chf-technical/'
 FORUM_URL = 'https://www.investing.com/currencies/usd-chf-commentary/'
-DB_NAME ='ratesrcaping'
+DB_NAME = 'ratesrcaping'
+
 
 def get_rate(start_date, end_date, pair):
     """
@@ -39,8 +42,8 @@ def get_rate(start_date, end_date, pair):
     """
     symbol = pair[-3:]
     base = pair[:3]
-    url = 'https://api.exchangerate.host/timeseries?start_date='+start_date+'&end_date='+end_date+\
-            '&symbols='+symbol+'&base='+base+'&source=ecb'
+    url = 'https://api.exchangerate.host/timeseries?start_date=' + start_date + '&end_date=' + end_date + \
+          '&symbols=' + symbol + '&base=' + base + '&source=ecb'
     response = requests.get(url)
     data = response.json()
 
@@ -85,7 +88,7 @@ def get_forum(url, start_date, end_date):
         comment_tree = list(comment_tree.children)[0].findChildren(class_='list_list__item__1kZYS', recursive=False)
         break_condition = False
         for comment in comment_tree:
-            #comment = comments.find(class_='comment_comment-wrapper__hJ8sd')
+            # comment = comments.find(class_='comment_comment-wrapper__hJ8sd')
             user = comment.find(class_="comment_user-info__AWjKG")
             username = user.findChildren("a", recursive=False)[0]
             username = username.text
@@ -101,8 +104,9 @@ def get_forum(url, start_date, end_date):
                 break_condition = True
                 break
             comment_text = comment.find(class_="comment_content__AvzPV").text
-            subcomment_tree = comment.find(class_="list_list--underline__dWxSt discussion_replies-wrapper__3sWFn").children
-            dc = {'id': id_, 'instrument_id':'', 'parent_id': pd.NaN, 'username': username, 'postdate': postdate,
+            subcomment_tree = comment.find(
+                class_="list_list--underline__dWxSt discussion_replies-wrapper__3sWFn").children
+            dc = {'id': id_, 'instrument_id': '', 'parent_id': pd.NaN, 'username': username, 'postdate': postdate,
                   'comment_text': comment_text}
             parent_id = id_
             id_ += 1
@@ -118,7 +122,8 @@ def get_forum(url, start_date, end_date):
                     logging.error("Error while converting %s to date format on page %s", postdate.text, url)
                     postdate = pd.NaN
                 comment_text = subcomment.find(class_="comment_content__AvzPV").text
-                dc = {'id': id_, 'instrument_id': '', 'parent_id': parent_id, 'username': username, 'postdate': postdate,
+                dc = {'id': id_, 'instrument_id': '', 'parent_id': parent_id, 'username': username,
+                      'postdate': postdate,
                       'comment_text': comment_text}
                 id_ += 1
                 df = pd.concat([pd.DataFrame(dc, index=[0]), df.loc[:]]).reset_index(drop=True)
@@ -169,7 +174,7 @@ def get_technical(url):
     """
     response = set_technical_period(url)
     # response = get_response(url, HEADERS)
-    soup = BeautifulSoup(response, 'html.parser')   # response.content
+    soup = BeautifulSoup(response, 'html.parser')  # response.content
     table = soup.find('table', class_='genTbl closedTbl technicalIndicatorsTbl smallTbl float_lang_base_1')
     # Defining of the dataframe
     df = pd.DataFrame(columns=['Name', 'Value', 'Action'])
@@ -190,6 +195,8 @@ def get_technical(url):
 def get_news(url, start, end, *, return_news=True, return_comments=True):
     """
     returns news from start to end dates
+    :param return_comments: do you need to return comments Bool
+    :param return_news: do you need to return news Bool
     :param url: url of first page of news
     :param start: start date
     :param end: end date
@@ -199,15 +206,6 @@ def get_news(url, start, end, *, return_news=True, return_comments=True):
     for link in news_page_links:
         news, comments = take_news(link, return_news, return_comments)
         output_news(news, comments)
-
-
-def setup_connection(db_name=DB_NAME):
-    cnx2 = pymysql.connect(host='localhost',
-                           user='root',
-                           password=PASSWORD,
-                           database=db_name)
-    cursor2 = cnx2.cursor()
-    return cnx2, cursor2
 
 
 def get_news_pages(url, start, end):
@@ -245,7 +243,7 @@ def get_news_pages(url, start, end):
 
 def get_news_comment(soup):
     comments_parent = soup.find(class_="js-comments-wrapper commentsWrapper")
-    df = pd.DataFrame(columns=['id', 'news_id', 'parent_id', 'username',  'comment_text', 'postdate', 'url'])
+    df = pd.DataFrame(columns=['id', 'news_id', 'parent_id', 'username', 'comment_text', 'postdate', 'url'])
     id_ = 1
     for comment in comments_parent.findChildren(class_='comment js-comment', recursive=False):
         comment_body = comment.find(class_="commentBody")
@@ -285,7 +283,7 @@ def take_news(links, return_news, return_comments):
     link = links
     # news = []
     # for link in links:
-    #response = get_response(link, HEADERS)
+    # response = get_response(link, HEADERS)
     logging.info("news scraping started, url = %s", link)
     service = Service(executable_path=ChromeDriverManager().install())
     logging.debug("Service installed")
@@ -314,8 +312,12 @@ def take_news(links, return_news, return_comments):
 
         date = soup.find(class_="contentSectionDetails").select_one('span').text
         news = {'date': date, 'author': author, 'title': title, 'text': news_text}
+    else:
+        news = None
     if return_comments:
         comments = get_news_comment(soup)
+    else:
+        comments = None
     return news, comments
 
 
@@ -333,9 +335,92 @@ def get_response(url, header):
         raise ConnectionError("Connection error during request directors of %s" % url)
 
 
+def setup_connection(db_name=DB_NAME):
+    try:
+        cnx = pymysql.connect(host='localhost',
+                              user='root',
+                              password=PASSWORD,
+                              database=db_name)
+        logging.info("connection set up")
+    except Exception:
+        logging.error("Error during connection set up")
+        raise ConnectionError("Error during connection to DB")
+    cursor = cnx.cursor()
+    return cnx, cursor
+
+
+def db_insert_check_instrument(pair, cursor, cnx):
+    """
+    Checking if pair exist in DB, in case no - inserts
+    :param cnx: connection
+    :param cursor: cursor to connection
+    :param pair: currency pair in format USDRUB
+    :return: instrument_id of pair
+    """
+    query = """SELECT id FROM instruments WHERE instrument_name = '%s'""" % pair
+    try:
+        cursor.execute(query)
+        instrument_id = cursor.fetchone()
+    except pymysql.err.OperationalError as e:
+        raise RuntimeError("Error when inserting to instruments, Check query", e)
+    except Exception as e:
+        raise RuntimeError("Error when inserting to instruments", e)
+
+    if instrument_id is None:
+        query = """INSERT INTO instruments (instrument_name)
+                   VALUES ('%s')""" % pair
+        query_s = """SELECT id FROM instruments WHERE instrument_name = '%s'""" % pair
+        try:
+            cursor.execute(query)
+            cnx.commit()
+            logging.info("Instrument %s has been successfully added to instruments table" % instrument_id)
+            cursor.execute(query_s)
+            instrument_id = cursor.fetchone()
+        except pymysql.err.OperationalError as e:
+            logging.error("Error when inserting to instruments, Check query")
+            raise RuntimeError("Error when inserting to instruments, Check queries", e)
+        except Exception as e:
+            logging.error("Error when inserting to instruments")
+            raise RuntimeError("Error when inserting to instruments", e)
+    return instrument_id[0]
+
+
+def db_write_rates(cnx, cursor, pair, df_rates):
+    """
+    write currency rate to db (only new ones).
+    :param cnx: connection
+    :param cursor: cursor to connection
+    :param pair: currency pair name (format USDCFH)
+    :param df_rates: data frame with dates and rates
+    :return: nothing
+    """
+    instrument_id = db_insert_check_instrument(pair, cursor=cursor, cnx=cnx)
+    data = df_rates.to_dict('records')
+    min_date = df_rates['date'].min(axis=0)
+    max_date = df_rates['date'].max(axis=0)
+
+    query = """INSERT INTO daily_rates (instrument_id, date_on, rate)
+               SELECT """ + str(instrument_id) + """, %(date)s, %(rate)s
+               WHERE NOT EXISTS (SELECT 1 FROM daily_rates 
+                                 WHERE date_on = %(date)s and instrument_id = """ + str(instrument_id) + ")"
+    try:
+        cursor.executemany(query, data)
+        cnx.commit()
+        logging.info("Rates for %s have been added (if didn't exist) to daily_rates for period %s - %s" % (pair,
+                                                                                                           min_date,
+                                                                                                           max_date))
+    except pymysql.err.OperationalError as e:
+        logging.error("Error when inserting to daily_rates, Check query")
+        raise RuntimeError("Error when inserting to daily_rates, Check queries", e)
+    except Exception as e:
+        logging.error("Error when inserting to daily_rates")
+        raise RuntimeError("Error when inserting to daily_rates", e)
+
+
 def output_news(news, comments):
     """
     print, print to file,.. news
+    :param comments: comments to output
     :param news: dict of items connected to news (date, text,...)
     :return: nothing
     """
@@ -346,19 +431,25 @@ def output_news(news, comments):
 
 def main():
     logging.basicConfig(filename='Rate_scrapping.log',
-        format='%(asctime)s-%(levelname)s+++FILE:%(filename)s-FUNC:%(funcName)s-LINE:%(lineno)d-%(message)s',
+            format='%(asctime)s-%(levelname)s+++FILE:%(filename)s-FUNC:%(funcName)s-LINE:%(lineno)d-%(message)s',
                         level=logging.INFO)
-    #t = get_forum('https://www.investing.com/currencies/usd-chf-commentary', datetime(2022,6,1), datetime(2022,8,13))
-    # command_parser()
-    df = get_rate('2022-06-30','2022-08-14','USDCHF')
-    data = df.to_dict('records')
-    cnx, cursor = setup_connection(db_name=DB_NAME)
-    #cursor.execute(f"USE {DB_NAME}")
-    query = """INSERT INTO daily_rates (date_on, rate)
-               VALUES (%(date)s, %(rate)s)"""
-    cursor.executemany(query, data)
-    cnx.commit()
 
+    # t = get_forum('https://www.investing.com/currencies/usd-chf-commentary', datetime(2022,6,1), datetime(2022,8,13))
+    # command_parser()
+    cnx, cursor = setup_connection(db_name=DB_NAME)
+    df = get_rate('2022-06-30', '2022-08-14', 'USDCHF')
+    db_write_rates(cnx, cursor, 'USDEUR', df)
+    print(traceback.format_exc())
+    # or
+    print(sys.exc_info()[2])
+
+    # data = df.to_dict('records')
+    # cnx, cursor = setup_connection(db_name=DB_NAME)
+    # cursor.execute(f"USE {DB_NAME}")
+    # query = """INSERT INTO daily_rates (date_on, rate)
+    #           VALUES (%(date)s, %(rate)s)"""
+    # cursor.executemany(query, data)
+    # cnx.commit()
 
 
 def valid_date(s):
@@ -406,5 +497,6 @@ def command_parser():
         args = parser.parse_args(sub_args)
         t = FUNCTION_MAP["forum"](args.url, args.date_from, args.date_to)
         t.to_csv("output.csv")
+
 
 main()

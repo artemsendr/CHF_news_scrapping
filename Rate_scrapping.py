@@ -75,8 +75,7 @@ def get_forum(url, start_date, end_date):
     page_number = 1
     id_ = 1
     purl = url
-    df = pd.DataFrame(columns=['id', 'instrument_id', 'parent_id', 'username', 'postdate', 'comment_text'],
-                      index=['id'])
+    df = pd.DataFrame(columns=['id', 'instrument_id', 'parent_id', 'username', 'postdate', 'comment_text'])
     while not break_condition:
         driver.get(purl)
         logging.info("Page %s loaded", purl)
@@ -106,7 +105,7 @@ def get_forum(url, start_date, end_date):
             comment_text = comment.find(class_="comment_content__AvzPV").text
             subcomment_tree = comment.find(
                 class_="list_list--underline__dWxSt discussion_replies-wrapper__3sWFn").children
-            dc = {'id': id_, 'instrument_id': '', 'parent_id': pd.NaN, 'username': username, 'postdate': postdate,
+            dc = {'id': id_, 'instrument_id': '', 'parent_id': None, 'username': username, 'postdate': postdate,
                   'comment_text': comment_text}
             parent_id = id_
             id_ += 1
@@ -131,6 +130,67 @@ def get_forum(url, start_date, end_date):
         purl = url + "/" + str(page_number)
     logging.info("forum scraping started, url = %s", url)
     return df
+
+
+def db_insert_forum(df_forum, pair, cursor, cnx):
+    """
+    check if exist and if not insert forum to DB
+    :param df_forum pandas dataframe columns = ['id', 'instrument_id', 'parent_id', 'username', 'postdate', 'comment_text']
+    :param pair: currency pair in format USDRUB
+    :param cursor: connection
+    :param cnx: cursor to connection
+    :return: nothing
+    """
+    # get last id from forum table
+    query = "SELECT max(id) FROM forum"
+    try:
+        cursor.execute(query)
+        last_index =  cursor.fetchone()
+    except Exception as e:
+        logging.error("Error when selecting from forum")
+        raise RuntimeError("Error when selecting from forum", e)
+    if last_index[0] is None:
+        add_index = 0
+    else:
+        add_index = last_index[0]
+    # add this index to dummy id's in the dataframe
+    df_forum['id'] += add_index
+    df_forum['parent_id'] += add_index
+    df_forum.loc[pd.isnull(df_forum['parent_id']), 'parent_id'] = None
+
+    instrument_id = db_insert_check_instrument(pair, cursor=cursor, cnx=cnx)
+
+    # split to head comments and comments to comments (in order to start from head ones to keep relations)
+    main_comments = df_forum[pd.isnull(df_forum['parent_id'])]
+    sub_comments = df_forum[pd.notnull(df_forum['parent_id'])]
+    min_date = main_comments['postdate'].min(axis=0)
+    max_date = main_comments['postdate'].max(axis=0)
+
+    data_main = main_comments.to_dict('records')
+    data_sub = sub_comments.to_dict('records')
+
+    # insert data if not exists
+    query = """INSERT INTO forum (id, instrument_id, parent_id, username, post_date, comment_text)
+               SELECT %(id)s, """ + str(instrument_id) + """, %(parent_id)s, %(username)s, %(postdate)s, %(comment_text)s
+               WHERE NOT EXISTS (SELECT 1 FROM forum 
+                                 WHERE post_date = %(postdate)s and username = %(username)s and comment_text = %(comment_text)s
+                                  and instrument_id = """ + str(instrument_id) + ")"
+
+
+    try:
+        cursor.executemany(query, data_main)
+        cnx.commit()
+        cursor.executemany(query, data_sub)
+        cnx.commit()
+        logging.info("Forum for %s have been added (if didn't exist) to forum table for period %s - %s" % (pair,
+                                                                                                           min_date,
+                                                                                                           max_date))
+    except pymysql.err.OperationalError as e:
+        logging.error("Error when inserting to forum, Check query")
+        raise RuntimeError("Error when inserting to forum, Check queries", e)
+    except Exception as e:
+        logging.error("Error when inserting to forum")
+        raise RuntimeError("Error when inserting to forum", e)
 
 
 def date_converter(textdate):
@@ -200,12 +260,22 @@ def get_news(url, start, end, *, return_news=True, return_comments=True):
     :param url: url of first page of news
     :param start: start date
     :param end: end date
-    :return: list of tuples date - news
+    :return: tuple of dataframes: news and comments to news (optionally empty)
     """
+    logging.info("news scraping started, url = %s", url)
+    df_news = pd.DataFrame(columns=['news_text', 'title', 'date_on', 'author'])
+    df_news_comments = pd.DataFrame(columns=['id', 'news_id', 'parent_id',
+                                             'username', 'comment_text', 'postdate', 'url'])
     news_page_links = get_news_pages(url, start, end)
     for link in news_page_links:
         news, comments = take_news(link, return_news, return_comments)
-        output_news(news, comments)
+        if return_news:
+            df_news = pd.concat([pd.DataFrame(news, index=[0]), df_news.loc[:]]).reset_index(drop=True)
+        if return_comments:
+            comments.loc['url'] = link
+            df_news_comments = pd.concat([comments.loc[:], df_news_comments.loc[:]]).reset_index(drop=True)
+        #output_news(news, comments)
+    return df_news, df_news_comments
 
 
 def get_news_pages(url, start, end):
@@ -311,7 +381,7 @@ def take_news(links, return_news, return_comments):
             author = author[3:]
 
         date = soup.find(class_="contentSectionDetails").select_one('span').text
-        news = {'date': date, 'author': author, 'title': title, 'text': news_text}
+        news = {'date': date, 'author': author, 'title': title, 'news_text': news_text}
     else:
         news = None
     if return_comments:
@@ -336,6 +406,8 @@ def get_response(url, header):
 
 
 def setup_connection(db_name=DB_NAME):
+    """setup connection to local server to db_name database
+    """
     try:
         cnx = pymysql.connect(host='localhost',
                               user='root',
@@ -424,9 +496,22 @@ def output_news(news, comments):
     :param news: dict of items connected to news (date, text,...)
     :return: nothing
     """
-    print(f"\n date: {news['date']}, {news['author']}, {news['title']} \n text: \n {news['text']}")
+    print(f"\n date: {news['date']}, {news['author']}, {news['title']} \n text: \n {news['news_text']}")
     if comments.shape[0] > 0:
         print("\t", comments)
+
+
+def write_news_db(cnx, cursor, pair, df_news):
+    """
+    write currency rate to db (only new ones).
+    :param cnx: connection
+    :param cursor: cursor to connection
+    :param pair: currency pair name (format USDCFH)
+    :param df_news: data frame with dates and news
+    :return: nothing
+    """
+
+
 
 
 def main():
@@ -437,8 +522,12 @@ def main():
     # t = get_forum('https://www.investing.com/currencies/usd-chf-commentary', datetime(2022,6,1), datetime(2022,8,13))
     # command_parser()
     cnx, cursor = setup_connection(db_name=DB_NAME)
-    df = get_rate('2022-06-30', '2022-08-14', 'USDCHF')
-    db_write_rates(cnx, cursor, 'USDEUR', df)
+    #df = get_rate('2022-06-30', '2022-08-14', 'USDCHF')
+    #db_write_rates(cnx, cursor, 'USDEUR', df)
+
+    #command_parser()
+    df = get_forum('https://www.investing.com/currencies/usd-chf-commentary', datetime(2022,6,1), datetime(2022,8,13))
+    db_insert_forum(df, 'USDCHF',cursor, cnx)
     print(traceback.format_exc())
     # or
     print(sys.exc_info()[2])
@@ -487,7 +576,9 @@ def command_parser():
         parser.add_argument('date_from', type=valid_date)
         parser.add_argument('date_to', nargs="?", type=valid_date, default=datetime.today())
         args = parser.parse_args(sub_args)
-        FUNCTION_MAP["news"](args.url, args.date_from, args.date_to)
+        a,b = FUNCTION_MAP["news"](args.url, args.date_from, args.date_to)
+        print(a)
+        print(b)
 
     elif args.operation == "forum":
         parser = argparse.ArgumentParser()

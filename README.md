@@ -1,15 +1,37 @@
 
 # CHF_news_scrapping
-Data mining project of gathering data about CHFUSD rate and related news
 
-# solving the problem
-to get the neccesary data we use the requests, grequests and BeautifulSoup moduls and their functionality in varius implenetd functions.
-The code is built "top down" style
+### Web scraping project to get rates, news and discussions of the different currencies
+[Investing.com](https://www.investing.com/) is well-know web site about worldwide financail data. 
+User expected to enter currency pair he interested to scrape and receive all data to his local database. Data includes:
 
-# Functions and Usage
-The main function is get_news, that gathers links to news in the website and displays it.
-Call get_news with start_date and end_date parameters to desplay all news data from start date to end date.
+1. News, related (according investing.com) to currency pair.
 
-take_news and get_response are technical functions to scrape the different news links details, and to get request from news links respectively.
-output_news prints the data
+2. ECB rates
+
+3. Discussions about news
+
+4. Discussions about currency pair from forum page.
+
+5. Technical indicators and actions to do (BUY/SELL) regarding them  
+
+Additionally [exchangerate.host](https://exchangerate.host/) API have been used to take ECB currency rates.
+
+Database structure locates in ERD.pdf file.
+
+# instructions
+
+The main function when runs command line interface.
+
+The script should be run on any python IDLE, check requirements.txt for further information.
+
+Several libraries used are not specified in the requirements.txt file since they are built-in Python modules and there is no need to.
+
+To install the dependencies needed for this file, run:
+
+```
+pip install -r requirements.txt
+```
+
+*This repo is in 'milestone 3' stage and will keep being updated.*
 

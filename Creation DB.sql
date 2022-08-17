@@ -92,4 +92,4 @@ ALTER TABLE `forum` ADD FOREIGN KEY (`parent_id`) REFERENCES `forum` (`id`);
 ALTER TABLE `ratesrcaping` ADD COLUMN (`url`) VARCHAR(255) NULL AFTER (`author`);
 
 ALTER TABLE `news` ADD COLUMN (`url`) VARCHAR(255) NULL AFTER (`author`);
-
+--

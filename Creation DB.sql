@@ -88,3 +88,8 @@ ALTER TABLE `comments` ADD FOREIGN KEY (`news_id`) REFERENCES `news` (`id`);
 ALTER TABLE `comments` ADD FOREIGN KEY (`parent_id`) REFERENCES `comments` (`id`);
 
 ALTER TABLE `forum` ADD FOREIGN KEY (`parent_id`) REFERENCES `forum` (`id`);
+
+ALTER TABLE `ratesrcaping` ADD COLUMN (`url`) VARCHAR(255) NULL AFTER (`author`);
+
+ALTER TABLE `news` ADD COLUMN (`url`) VARCHAR(255) NULL AFTER (`author`);
+

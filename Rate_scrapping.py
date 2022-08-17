@@ -1,4 +1,5 @@
 import re
+import pytz
 import logging
 import traceback
 import sys
@@ -8,7 +9,7 @@ import numpy as np
 from bs4 import BeautifulSoup
 # import grequests
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import pandas as pd
 # pip install webdriver-manager
 # service = Service(executable_path=ChromeDriverManager().install())
@@ -30,6 +31,7 @@ NEWS_URL = 'https://www.investing.com/currencies/usd-chf-news/'
 TECHNICAL_URL = 'https://www.investing.com/currencies/usd-chf-technical/'
 FORUM_URL = 'https://www.investing.com/currencies/usd-chf-commentary/'
 DB_NAME = 'ratesrcaping'
+LOCAL_TIMEZONE = datetime.now(timezone.utc).astimezone().tzinfo
 
 
 def get_rate(start_date, end_date, pair):
@@ -145,7 +147,7 @@ def db_insert_forum(df_forum, pair, cursor, cnx):
     query = "SELECT max(id) FROM forum"
     try:
         cursor.execute(query)
-        last_index =  cursor.fetchone()
+        last_index = cursor.fetchone()
     except Exception as e:
         logging.error("Error when selecting from forum")
         raise RuntimeError("Error when selecting from forum", e)
@@ -175,7 +177,6 @@ def db_insert_forum(df_forum, pair, cursor, cnx):
                WHERE NOT EXISTS (SELECT 1 FROM forum 
                                  WHERE post_date = %(postdate)s and username = %(username)s and comment_text = %(comment_text)s
                                   and instrument_id = """ + str(instrument_id) + ")"
-
 
     try:
         cursor.executemany(query, data_main)
@@ -263,18 +264,20 @@ def get_news(url, start, end, *, return_news=True, return_comments=True):
     :return: tuple of dataframes: news and comments to news (optionally empty)
     """
     logging.info("news scraping started, url = %s", url)
-    df_news = pd.DataFrame(columns=['news_text', 'title', 'date_on', 'author'])
+    df_news = pd.DataFrame(columns=['news_text', 'title', 'date', 'author', 'url'])
     df_news_comments = pd.DataFrame(columns=['id', 'news_id', 'parent_id',
                                              'username', 'comment_text', 'postdate', 'url'])
     news_page_links = get_news_pages(url, start, end)
     for link in news_page_links:
         news, comments = take_news(link, return_news, return_comments)
-        if return_news:
+        if return_news and news is not None:
+            news['url'] = link
             df_news = pd.concat([pd.DataFrame(news, index=[0]), df_news.loc[:]]).reset_index(drop=True)
-        if return_comments:
+        if return_comments and comments is not None:
             comments.loc['url'] = link
             df_news_comments = pd.concat([comments.loc[:], df_news_comments.loc[:]]).reset_index(drop=True)
-        #output_news(news, comments)
+        # output_news(news, comments)
+
     return df_news, df_news_comments
 
 
@@ -293,12 +296,18 @@ def get_news_pages(url, start, end):
     while break_condition:
         response = get_response(summary_url, HEADERS)
         soup = BeautifulSoup(response.content, 'html.parser')
-        news_items = soup.findAll(class_="articleDetails")
+        news_part = soup.find(lambda tag: tag.name == 'div' and tag.get('class') == ['mediumTitle1'])
+        news_items = news_part.findAll(class_="articleDetails")
         for news in news_items:
             date_scope = news.find(class_="date").text
             date = date_scope.replace(u'\xa0', "")
             date = date.strip("- ")
-            date_news = datetime.strptime(date, '%b %d, %Y')
+            try:
+                date_news = datetime.strptime(date, '%b %d, %Y')
+            except Exception:
+                logging.error("Error of converting %s to date format" % date)
+                date_news = datetime.combine(datetime.today(), datetime.min.time())
+                # print("some minor errors occured during the scrapping, look the log")
             if start <= date_news <= end:
                 url = news.parent.find("a").get('href')
                 news_links.append(SITE_URL + url)
@@ -351,9 +360,6 @@ def take_news(links, return_news, return_comments):
     :return: news
     """
     link = links
-    # news = []
-    # for link in links:
-    # response = get_response(link, HEADERS)
     logging.info("news scraping started, url = %s", link)
     service = Service(executable_path=ChromeDriverManager().install())
     logging.debug("Service installed")
@@ -361,13 +367,17 @@ def take_news(links, return_news, return_comments):
     logging.debug("Driver launched")
     driver.get(link)
     logging.info("Page %s loaded", link)
-    driver.implicitly_wait(5)
+    driver.implicitly_wait(1)
     response = driver.page_source
 
     soup = BeautifulSoup(response, 'html.parser')
     if return_news:
-        title = soup.find(class_="articleHeader").text
-        news_section = soup.find(class_="WYSIWYG articlePage")
+        try:
+            title = soup.find(class_="articleHeader").text
+            news_section = soup.find(class_="WYSIWYG articlePage")
+        except Exception:
+            logging.error("Error while scrapping %s" % link)
+            return None, None
         author = ''
         news_text = ''
         for parts in news_section.findChildren("p"):
@@ -381,6 +391,14 @@ def take_news(links, return_news, return_comments):
             author = author[3:]
 
         date = soup.find(class_="contentSectionDetails").select_one('span').text
+        if date.find("ago") != -1:
+            date = re.search("\((.+?)\)", date).group(1)
+        if date.find("ET"):
+            est = pytz.timezone('US/Eastern')
+            date = datetime.strptime(date[:-3], '%b %d, %Y %I:%M%p')
+            date = est.localize(date).astimezone()
+        else:
+            date = datetime.strptime(date[:-3], '%b %d, %Y %I:%M%p')
         news = {'date': date, 'author': author, 'title': title, 'news_text': news_text}
     else:
         news = None
@@ -426,7 +444,7 @@ def db_insert_check_instrument(pair, cursor, cnx):
     Checking if pair exist in DB, in case no - inserts
     :param cnx: connection
     :param cursor: cursor to connection
-    :param pair: currency pair in format USDRUB
+    :param pair: currency pair in format USDRUB (str)
     :return: instrument_id of pair
     """
     query = """SELECT id FROM instruments WHERE instrument_name = '%s'""" % pair
@@ -503,42 +521,70 @@ def output_news(news, comments):
 
 def write_news_db(cnx, cursor, pair, df_news):
     """
-    write currency rate to db (only new ones).
+    write news to db (only new ones).
     :param cnx: connection
     :param cursor: cursor to connection
     :param pair: currency pair name (format USDCFH)
     :param df_news: data frame with dates and news
     :return: nothing
     """
+    instrument_id = db_insert_check_instrument(pair, cursor=cursor, cnx=cnx)
+    query_news = """INSERT INTO news (news_text, title, date_on, author, url)
+                    SELECT %(news_text)s, %(title)s, %(date)s, %(author)s, %(url)s
+                    WHERE NOT EXISTS (SELECT 1 FROM news 
+                                      WHERE  url = %(url)s)    
+                    """
+    # 'id', 'news_text', 'title', 'date', 'author', 'url'
+    query_instr = """INSERT INTO instrument_news (instrument_id, news_id)
+                     SELECT """ + str(instrument_id) + """, id
+                     FROM news
+                     WHERE url = %(url)s and NOT EXISTS (SELECT 1 FROM instrument_news 
+                                      WHERE  news_id = (select id from news where url = %(url)s limit 1)
+                                      and  instrument_id = """ + str(instrument_id) + ")"
+    data_news = df_news.to_dict('records')
+
+    try:
+        cursor.executemany(query_news, data_news)
+        cnx.commit()
+        cursor.executemany(query_instr, data_news)
+        cnx.commit()
+    except pymysql.err.OperationalError as e:
+        logging.error("Error when inserting to news, Check query")
+        raise RuntimeError("Error when inserting to news, Check queries", e)
+    except Exception as e:
+        logging.error("Error when inserting to news")
+        raise RuntimeError("Error when inserting to news", e)
 
 
+def scrape_all(pair, start_date, end_date):
+    """
+    scrape data for pair from forum, news, rates
+    :param pair: pair: currency pair name (format USDCFH)
+    :param start_date: datetime only!
+    :param end_date: datetime only!
+    :return: nothing
+    """
+    cur1 = pair[:3]
+    cur2 = pair[-3:]
+    url_news = "https://www.investing.com/currencies/" + cur1.lower() + '-' + cur2.lower() + '-news'
+    url_forum = "https://www.investing.com/currencies/" + cur1.lower() + '-' + cur2.lower() + '-commentary'
+    cnx, cursor = setup_connection(db_name=DB_NAME)
+    df_news, df_comments = get_news(url_news, start_date, end_date)
+    write_news_db(cnx, cursor, pair, df_news)
+    df = get_forum(url_forum, start_date, end_date)
+    db_insert_forum(df, pair, cursor, cnx)
+    df = get_rate(start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), pair)
+    db_write_rates(cnx, cursor, pair, df)
+    cnx.close()
+    cursor.close()
 
 
 def main():
     logging.basicConfig(filename='Rate_scrapping.log',
-            format='%(asctime)s-%(levelname)s+++FILE:%(filename)s-FUNC:%(funcName)s-LINE:%(lineno)d-%(message)s',
+                        format='%(asctime)s-%(levelname)s+++FILE:%(filename)s-FUNC:%(funcName)s-LINE:%(lineno)d-%(message)s',
                         level=logging.INFO)
-
-    # t = get_forum('https://www.investing.com/currencies/usd-chf-commentary', datetime(2022,6,1), datetime(2022,8,13))
-    # command_parser()
-    cnx, cursor = setup_connection(db_name=DB_NAME)
-    #df = get_rate('2022-06-30', '2022-08-14', 'USDCHF')
-    #db_write_rates(cnx, cursor, 'USDEUR', df)
-
-    #command_parser()
-    df = get_forum('https://www.investing.com/currencies/usd-chf-commentary', datetime(2022,6,1), datetime(2022,8,13))
-    db_insert_forum(df, 'USDCHF',cursor, cnx)
-    print(traceback.format_exc())
-    # or
+    command_parser()
     print(sys.exc_info()[2])
-
-    # data = df.to_dict('records')
-    # cnx, cursor = setup_connection(db_name=DB_NAME)
-    # cursor.execute(f"USE {DB_NAME}")
-    # query = """INSERT INTO daily_rates (date_on, rate)
-    #           VALUES (%(date)s, %(rate)s)"""
-    # cursor.executemany(query, data)
-    # cnx.commit()
 
 
 def valid_date(s):
@@ -560,7 +606,8 @@ def command_parser():
     parser = argparse.ArgumentParser(description='parsing data options')
     FUNCTION_MAP = {'news': get_news,
                     'technical': get_technical,
-                    'forum': get_forum}
+                    'forum': get_forum,
+                    'all': scrape_all}
     parser.add_argument('operation', nargs="?", type=str, choices=FUNCTION_MAP.keys())
 
     args, sub_args = parser.parse_known_args()
@@ -574,9 +621,9 @@ def command_parser():
         parser = argparse.ArgumentParser()
         parser.add_argument('url', type=str)
         parser.add_argument('date_from', type=valid_date)
-        parser.add_argument('date_to', nargs="?", type=valid_date, default=datetime.today())
+        parser.add_argument('date_to', nargs="?", type=valid_date, default=datetime.now())
         args = parser.parse_args(sub_args)
-        a,b = FUNCTION_MAP["news"](args.url, args.date_from, args.date_to)
+        a, b = FUNCTION_MAP["news"](args.url, args.date_from, args.date_to)
         print(a)
         print(b)
 
@@ -584,10 +631,18 @@ def command_parser():
         parser = argparse.ArgumentParser()
         parser.add_argument('url', type=str)
         parser.add_argument('date_from', type=valid_date)
-        parser.add_argument('date_to', nargs="?", type=valid_date, default=datetime.today())
+        parser.add_argument('date_to', nargs="?", type=valid_date, default=datetime.now())
         args = parser.parse_args(sub_args)
         t = FUNCTION_MAP["forum"](args.url, args.date_from, args.date_to)
         t.to_csv("output.csv")
+    elif args.operation == "all":
+        parser = argparse.ArgumentParser()
+        parser.add_argument('pair', type=str)
+        parser.add_argument('date_from', type=valid_date)
+        parser.add_argument('date_to', nargs="?", type=valid_date, default=datetime.now())
+        args = parser.parse_args(sub_args)
+        FUNCTION_MAP["all"](args.pair, args.date_from, args.date_to)
+        print("SUCCESS")
 
 
 main()

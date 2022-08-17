@@ -33,5 +33,11 @@ To install the dependencies needed for this file, run:
 pip install -r requirements.txt
 ```
 
+Usage:
+
+```
+all USDCHF 2022-08-16
+```
+
 *This repo is in 'milestone 3' stage and will keep being updated.*
 

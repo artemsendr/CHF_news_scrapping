@@ -420,7 +420,7 @@ def get_response(url, header):
         raise ConnectionError("Connection error during request directors of %s" % url)
 
 
-def setup_connection(db_name=DB_NAME):
+def setup_connection(db_name=cfg.DB_NAME):
     """setup connection to local server to db_name database
     """
     try:
@@ -565,7 +565,7 @@ def scrape_all(pair, start_date, end_date):
     cur2 = pair[-3:]
     url_news = "https://www.investing.com/currencies/" + cur1.lower() + '-' + cur2.lower() + '-news'
     url_forum = "https://www.investing.com/currencies/" + cur1.lower() + '-' + cur2.lower() + '-commentary'
-    cnx, cursor = setup_connection(db_name=DB_NAME)
+    cnx, cursor = setup_connection()
     df_news, df_comments = get_news(url_news, start_date, end_date)
     write_news_db(cnx, cursor, pair, df_news)
     df = get_forum(url_forum, start_date, end_date)

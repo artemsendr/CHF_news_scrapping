@@ -1,7 +1,7 @@
 import re
 import pytz
 import logging
-import traceback
+
 import sys
 import argparse
 import pymysql
@@ -11,14 +11,14 @@ from bs4 import BeautifulSoup
 import requests
 from datetime import datetime, timedelta, timezone
 import pandas as pd
-# pip install webdriver-manager
-# service = Service(executable_path=ChromeDriverManager().install())
+
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 
-PASSWORD = input("Provide password for MySQL server:\n")
+import conf as cfg
+
 HEADERS = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET',
@@ -29,10 +29,7 @@ HEADERS = {
 SITE_URL = 'https://www.investing.com'
 NEWS_URL = 'https://www.investing.com/currencies/usd-chf-news/'
 TECHNICAL_URL = 'https://www.investing.com/currencies/usd-chf-technical/'
-FORUM_URL = 'https://www.investing.com/currencies/usd-chf-commentary/'
-DB_NAME = 'ratesrcaping'
-LOCAL_TIMEZONE = datetime.now(timezone.utc).astimezone().tzinfo
-
+#FORUM_URL = 'https://www.investing.com/currencies/usd-chf-commentary/'
 
 def get_rate(start_date, end_date, pair):
     """
@@ -316,7 +313,7 @@ def get_news_pages(url, start, end):
                 break
         # go to next page
         page_number += 1
-        summary_url = NEWS_URL + str(page_number)
+        summary_url = NEWS_URL + str(page_number) ## TODO: delete NEWS_URL
     return news_links
 
 
@@ -427,10 +424,10 @@ def setup_connection(db_name=DB_NAME):
     """setup connection to local server to db_name database
     """
     try:
-        cnx = pymysql.connect(host='localhost',
-                              user='root',
-                              password=PASSWORD,
-                              database=db_name)
+        cnx = pymysql.connect(host=cfg.HOST,
+                              user=cfg.USER,
+                              password=cfg.PASSWORD,
+                              database=cfg.DB_NAME)
         logging.info("connection set up")
     except Exception:
         logging.error("Error during connection set up")

@@ -16,6 +16,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 
 import conf as cfg
 
@@ -68,7 +69,11 @@ def get_forum(url, start_date, end_date):
     logging.info("forum scraping started, url = %s", url)
     service = Service(executable_path=ChromeDriverManager().install())
     logging.debug("Service installed")
-    driver = webdriver.Chrome(service=service)
+    options = Options()
+    options.headless = True
+    options.add_argument('--window-size=1920,1080')  # otherwise wont work in headless mode, a bug
+
+    driver = webdriver.Chrome(service=service, options=options)
     logging.debug("Driver launched")
     break_condition = False
     page_number = 1
@@ -215,7 +220,11 @@ def set_technical_period(url):
     :return:
     """
     service = Service(executable_path=ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service)
+    options = Options()
+    options.headless = True
+    options.add_argument('--window-size=1920,1080')  # otherwise wont work in headless mode, a bug
+
+    driver = webdriver.Chrome(service=service, options=options)
     driver.get(url)
     driver.implicitly_wait(5)
     time_periods_box = driver.find_element(by=By.ID, value="timePeriodsWidget")
@@ -360,7 +369,11 @@ def take_news(links, return_news, return_comments):
     logging.info("news scraping started, url = %s", link)
     service = Service(executable_path=ChromeDriverManager().install())
     logging.debug("Service installed")
-    driver = webdriver.Chrome(service=service)
+    options = Options()
+    options.headless = True
+    options.add_argument('--window-size=1920,1080')  # otherwise wont work in headless mode, a bug
+
+    driver = webdriver.Chrome(service=service, options=options)
     logging.debug("Driver launched")
     driver.get(link)
     logging.info("Page %s loaded", link)

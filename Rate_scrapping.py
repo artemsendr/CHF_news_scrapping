@@ -94,6 +94,7 @@ def get_forum(url, start_date, end_date):
             comment_tree = list(comment_tree.children)[0].findChildren(class_='list_list__item__1kZYS', recursive=False)
         except Exception:
             logging.error("error when scrapping %s", purl)
+            break
         break_condition = False
         for comment in comment_tree:
             # comment = comments.find(class_='comment_comment-wrapper__hJ8sd')

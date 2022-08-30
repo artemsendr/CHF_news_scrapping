@@ -30,7 +30,9 @@ HEADERS = {
 SITE_URL = 'https://www.investing.com'
 NEWS_URL = 'https://www.investing.com/currencies/usd-chf-news/'
 TECHNICAL_URL = 'https://www.investing.com/currencies/usd-chf-technical/'
-#FORUM_URL = 'https://www.investing.com/currencies/usd-chf-commentary/'
+
+
+# FORUM_URL = 'https://www.investing.com/currencies/usd-chf-commentary/'
 
 def get_rate(start_date, end_date, pair):
     """
@@ -178,7 +180,8 @@ def db_insert_forum(df_forum, pair, cursor, cnx):
                SELECT %(id)s, """ + str(instrument_id) + """, %(parent_id)s, %(username)s, %(postdate)s, %(comment_text)s
                WHERE NOT EXISTS (SELECT 1 FROM forum 
                                  WHERE post_date = %(postdate)s and username = %(username)s and comment_text = %(comment_text)s
-                                  and instrument_id = """ + str(instrument_id) + ")"
+                                  and instrument_id = """ + str(instrument_id) + """)
+                                  AND EXISTS (SELECT 1 FROM forum WHERE id = %(parent_id)s)"""  # crutches
 
     try:
         cursor.executemany(query, data_main)
@@ -322,7 +325,7 @@ def get_news_pages(url, start, end):
                 break
         # go to next page
         page_number += 1
-        summary_url = NEWS_URL + str(page_number) ## TODO: delete NEWS_URL
+        summary_url = NEWS_URL + str(page_number)  ## TODO: delete NEWS_URL
     return news_links
 
 

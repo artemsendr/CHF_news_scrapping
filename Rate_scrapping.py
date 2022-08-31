@@ -185,7 +185,7 @@ def db_insert_forum(df_forum, pair, cursor, cnx):
                WHERE NOT EXISTS (SELECT 1 FROM forum 
                                  WHERE post_date = %(postdate)s and username = %(username)s and comment_text = %(comment_text)s
                                   and instrument_id = """ + str(instrument_id) + """)
-                                  AND EXISTS (SELECT 1 FROM forum WHERE id = %(parent_id)s)"""  # crutches
+                                  AND EXISTS (SELECT 1 FROM forum WHERE coalesce(id = %(parent_id)s, true))"""  # crutches
 
     try:
         cursor.executemany(query, data_main)
